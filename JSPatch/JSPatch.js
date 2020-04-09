@@ -139,24 +139,68 @@ var global = this
   }
 
   var _formatDefineMethods = function(methods, newMethods, realClsName) {
-    for (var methodName in methods) {
+  
+  /*
+   var dic = {c:4, a:2, d:3, b:1}; // 定义一个字典
+   
+   console.log("输出最初的字典元素: ");
+   for(var key in dic){
+   console.log("key: " + key + " ,value: " + dic[key]);
+   }
+   */
+    for (var methodName in methods) { /*这里methodName为methods字典的key*/
       if (!(methods[methodName] instanceof Function)) return;
       (function(){
         var originMethod = methods[methodName]
-        newMethods[methodName] = [originMethod.length, function() {
+        newMethods[methodName] = [originMethod.length, function() { //originMethod.length表示函数期望的参数数量.
           try {
-            var args = _formatOCToJS(Array.prototype.slice.call(arguments))
+            /*
+             
+             The slice() method returns a shallow copy of a portion of an array into a new array object selected
+             from begin to end (end not included) where begin and end represent the index of items in that array.
+             The original array will not be modified.
+             
+             arr.slice([begin[, end]])
+             
+             
+             function test(a,b,c,d) {
+             var arg = Array.prototype.slice.call(arguments,1);
+             console.log(arg);
+             }
+             test("a","b","c","d"); //b,c,d
+             */
+            /*
+             
+             slice method can also be called to convert Array-like objects / collections to a new Array.
+             You just bind the method to the object. The arguments inside a function is an example of an 'array-like object'.
+             
+             
+             function list() {
+             return Array.prototype.slice.call(arguments)
+             }
+             
+             let list1 = list(1, 2, 3) // [1, 2, 3]
+             
+             
+             The splice() method changes the contents of an array by removing or replacing existing elements and/or adding new elements in place.
+             
+             let arrDeletedItems = array.splice(start[, deleteCount[, item1[, item2[, ...]]]])
+
+             item1[, item2 ] The elements to add to the array, beginning from start
+             
+             */
+            var args = _formatOCToJS(Array.prototype.slice.call(arguments))//arguments is an Array-like object accessible inside functions that contains the values of the arguments passed to that function.
             var lastSelf = global.self
             global.self = args[0]
             if (global.self) global.self.__realClsName = realClsName
-            args.splice(0,1)
+            args.splice(0,1),//删除第一个参数global.self
             var ret = originMethod.apply(originMethod, args)
-            global.self = lastSelf
+            global.self = lastSelf//还原global.self
             return ret
           } catch(e) {
             _OC_catch(e.message, e.stack)
           }
-        }]
+        }]/*newMethods[methodName]定义为数组，数组第一个元素为函数参数个数，第二个位*/
       })()
     }
   }
@@ -210,15 +254,36 @@ var global = this
     };
   }
 
+  /*
+   defineClass('JPTestProtocolObject : NSObject <JPTestProtocol, JPTestProtocol2>', ['prop1', 'prop2'], {
+   init: function(){
+   self = self.super().init();
+   self.setProp1('1');
+   self.setProp2('2');
+   return self;
+   },
+   _privateMethod: function() {
+   return 'P';
+   },
+   method: function() {
+   return 'A' + self.prop1() + self.prop2();
+   },
+   }, {
+   clsMethod: function() {
+   return 'A'
+   },
+   })
+   */
+  
   global.defineClass = function(declaration, properties, instMethods, clsMethods) {
     var newInstMethods = {}, newClsMethods = {}
-    if (!(properties instanceof Array)) {
+    if (!(properties instanceof Array)) { /*如果properties不是定义为数组的话，那么properties就是instMethods，instMethods就是clsMethods*/
       clsMethods = instMethods
       instMethods = properties
       properties = null
     }
 
-    if (properties) {
+    if (properties) {/*表示确实有属性需要处理*/
       properties.forEach(function(name){
         if (!instMethods[name]) {
           instMethods[name] = _propertiesGetFun(name);
@@ -230,7 +295,7 @@ var global = this
       });
     }
 
-    var realClsName = declaration.split(':')[0].trim()
+    var realClsName = declaration.split(':')[0].trim()//获取类名，'JPTestProtocolObject : NSObject <JPTestProtocol, JPTestProtocol2>'
 
     _formatDefineMethods(instMethods, newInstMethods, realClsName)
     _formatDefineMethods(clsMethods, newClsMethods, realClsName)
