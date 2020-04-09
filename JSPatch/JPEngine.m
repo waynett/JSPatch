@@ -570,9 +570,9 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
     NSArray *protocols = [protocolNames length] ? [protocolNames componentsSeparatedByString:@","] : nil;
     
     Class cls = NSClassFromString(className);
-    if (!cls) {
+    if (!cls) { //如果原来没有定义类
         Class superCls = NSClassFromString(superClassName);
-        if (!superCls) {
+        if (!superCls) {//该类的父类也没有
             _exceptionBlock([NSString stringWithFormat:@"can't find the super class %@", superClassName]);
             return @{@"cls": className};
         }
