@@ -119,6 +119,9 @@ var global = this
     }
   }
 
+  /*
+   global全局字典，key为clsName，value为字典，字典中含有 __clsName: clsName
+   */
   var _require = function(clsName) {
     if (!global[clsName]) {
       global[clsName] = {
@@ -128,6 +131,9 @@ var global = this
     return global[clsName]
   }
 
+  /*
+   全局函数，参数通过arguments获取，里面调用私有函数_require
+   */
   global.require = function() {
     var lastRequire
     for (var i = 0; i < arguments.length; i ++) {
@@ -161,10 +167,10 @@ var global = this
     }
   }
 
-  var _wrapLocalMethod = function(methodName, func, realClsName) {
+  var _wrapLocalMethod = function(methodName, func, realClsName) {//主要是将上下文的__realClsName赋值为realClsName
     return function() {
       var lastSelf = global.self
-      global.self = this
+      global.self = this//global.self保存当前正在执行的this，当func执行完以后，需要恢复到调用之前的this，func.apply(this, arguments)就是执行func
       this.__realClsName = realClsName
       var ret = func.apply(this, arguments)
       global.self = lastSelf
@@ -172,7 +178,7 @@ var global = this
     }
   }
 
-  var _setupJSMethod = function(className, methods, isInst, realClsName) {
+  var _setupJSMethod = function(className, methods, isInst, realClsName) {//负责将js定义的method存入全局变量_ocCls字典中
     for (var name in methods) {
       var key = isInst ? 'instMethods': 'clsMethods',
           func = methods[name]
@@ -244,7 +250,7 @@ var global = this
       clsMethods: {},
     }
 
-    if (superCls.length && _ocCls[superCls]) {
+    if (superCls.length && _ocCls[superCls]) {//将父类的所有的实例和类方法赋值给子类
       for (var funcName in _ocCls[superCls]['instMethods']) {
         _ocCls[className]['instMethods'][funcName] = _ocCls[superCls]['instMethods'][funcName]
       }
