@@ -197,7 +197,7 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
     context[@"_OC_callC"] = ^id(NSString *className, NSString *selectorName, JSValue *arguments) {
         return callSelector(className, selectorName, arguments, nil, NO);
     };
-    context[@"_OC_formatJSToOC"] = ^id(JSValue *obj) {
+    context[@"_OC_formatJSToOC"] = ^id(JSValue *obj) {//这个方法用于将 oc 端接收到的 js 对象转换为 oc 对象：
         return formatJSToOC(obj);
     };
     
@@ -1780,6 +1780,33 @@ static id formatOCToJS(id obj)
 
 static id formatJSToOC(JSValue *jsval)
 {
+    /*
+     <pre>
+     @textblock
+     Objective-C type  |   JavaScript type
+     --------------------+---------------------
+     nil         |     undefined
+     NSNull       |        null
+     NSString      |       string
+     NSNumber      |   number, boolean
+     NSDictionary    |   Object object
+     NSArray       |    Array object
+     NSDate       |     Date object
+     NSBlock (1)   |   Function object (1)
+     id (2)     |   Wrapper object (2)
+     Class (3)    | Constructor object (3)
+     @/textblock
+     </pre>
+     */
+    
+    /*!
+     @method
+     @abstract Convert this JSValue to an Objective-C object.
+     @discussion The JSValue is converted to an Objective-C object according
+     to the conversion rules specified above.
+     @result The Objective-C representation of this JSValue.
+     */
+    
     id obj = [jsval toObject];
     if (!obj || [obj isKindOfClass:[NSNull class]]) return _nilObj;
     

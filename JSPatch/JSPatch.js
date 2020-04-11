@@ -5,7 +5,7 @@ var global = this
   var _ocCls = {};
   var _jsCls = {};
 
-  var _formatOCToJS = function(obj) {
+  var _formatOCToJS = function(obj) {//这个方法用于将 js 端接收到的 OC 对象转换为 js 对象：
     if (obj === undefined || obj === null) return false
     if (typeof obj == "object") {
       if (obj.__obj) return obj
@@ -58,8 +58,8 @@ var global = this
     return _formatOCToJS(ret)
   }
 
-  var _customMethods = {
-    __c: function(methodName) {
+  var _customMethods = { //_customMethods是字典对象，存 __c: function
+    __c: function(methodName) {//__c类似于构建了js的全局转发函数，因为在oc里面会把所有的js函数用__c包含住
       var slf = this
 
       if (slf instanceof Boolean) {
@@ -86,7 +86,7 @@ var global = this
         }
       }
 
-      return function(){
+      return function(){//__c function返回值又是一个匿名函数-闭包，闭包里面访问外包的_methodFunc方法
         var args = Array.prototype.slice.call(arguments)
         return _methodFunc(slf.__obj, slf.__clsName, methodName, args, slf.__isSuper)
       }
@@ -113,9 +113,9 @@ var global = this
     }
   }
 
-  for (var method in _customMethods) {
+  for (var method in _customMethods) {//遍历字典对象key为method
     if (_customMethods.hasOwnProperty(method)) {
-      Object.defineProperty(Object.prototype, method, {value: _customMethods[method], configurable:false, enumerable: false})
+      Object.defineProperty(Object.prototype, method, {value: _customMethods[method], configurable:false, enumerable: false})//为所有对象都添加__c、super、performSelectorInOC、performSelector方法
     }
   }
 
