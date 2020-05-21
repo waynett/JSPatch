@@ -42,6 +42,8 @@ var global = this
     return obj
   }
   
+  //initWithTitle_message_delegate_cancelButtonTitle_otherButtonTitles
+  //initWithTitle:message:delegate:cancelButtonTitle:otherButtonTitles:;
   var _methodFunc = function(instance, clsName, methodName, args, isSuper, isPerformSelector) {
     var selectorName = methodName
     if (!isPerformSelector) {
@@ -54,17 +56,30 @@ var global = this
       }
     }
     var ret = instance ? _OC_callI(instance, selectorName, args, isSuper):
-                         _OC_callC(clsName, selectorName, args)
+                         _OC_callC(clsName, selectorName, args)//_OC_callC会返回对象：@{@"__obj": obj, @"__clsName":__clsName};
+    
+    /*
+     //返回值字典同时包含对象和对象的类型：@{@"__obj": obj, @"__clsName":__clsName};
+     static NSDictionary *_wrapObj(id obj)
+     {
+         if (!obj || obj == _nilObj) {
+             return @{@"__isNil": @(YES)};
+         }
+         return @{@"__obj": obj, @"__clsName": NSStringFromClass([obj isKindOfClass:[JPBoxing class]] ? [[((JPBoxing *)obj) unbox] class]: [obj class])};//如果之前已经box封包，解包获取类型，否则直接通过[obj class]
+     }
+     */
     return _formatOCToJS(ret)
   }
   
-  var ff = {aa:bb,cc:dd};
-  
-  ff.aa
+  //var alert = UIAlertView.alloc().initWithTitle_message_delegate_cancelButtonTitle_otherButtonTitles("JSPatchAmend", "Success", null, "Yes", null, null);
+  // UIAlertView即 this.UIAlertView 返回 {__clsName:"UIAlertView"}
+  // 后面所有的__c实例方法都会返回对象@{@"__obj": obj, @"__clsName":__clsName};作为javascript链式调用的this
 
-  
   var _customMethods = { //_customMethods是字典对象，存 __c: function,super: function,performSelectorInOC: function,performSelector: function
     __c: function(methodName) {//__c类似于构建了js的全局转发函数，因为在oc里面会把所有的js函数用__c包含住
+       
+      //最初this为require方法返回的对象，即：{__clsName:"UIAlertView"},该对象调用alloc方法
+  
       var slf = this
 
       if (slf instanceof Boolean) {
@@ -140,7 +155,7 @@ var global = this
       __clsName:"UIAlertView",
    }
 
-   require返回某个类的字典，字典key为clsName类名
+   require返回字典，字典key为clsName类名
    
    即相当于=>
    
