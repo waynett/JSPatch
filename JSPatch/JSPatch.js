@@ -78,7 +78,7 @@ var global = this
   var _customMethods = { //_customMethods是字典对象，存 __c: function,super: function,performSelectorInOC: function,performSelector: function
     __c: function(methodName) {//__c类似于构建了js的全局转发函数，因为在oc里面会把所有的js函数用__c包含住
        
-      //最初this为require方法返回的对象，即：{__clsName:"UIAlertView"},该对象调用alloc方法
+      //最初this为require方法返回的对象，即：{__clsName:"UIAlertView"},该对象调用__c("alloc")方法,
   
       var slf = this
 
@@ -107,7 +107,7 @@ var global = this
       }
 
       return function(){//__c function返回值又是一个匿名函数-闭包，闭包里面访问外包的_methodFunc方法
-        var args = Array.prototype.slice.call(arguments)
+        var args = Array.prototype.slice.call(arguments)     
         return _methodFunc(slf.__obj, slf.__clsName, methodName, args, slf.__isSuper)
       }
     },
