@@ -164,13 +164,21 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
 
 #pragma mark - APIS
 
+/*
+ startEngine会往context注册一些列的JS调用原生OC端的接口:JS=>OC
+ */
 + (void)startEngine
 {
-    if (![JSContext class] || _context) {
+    
+    if (![JSContext class] || _context) {//[JSContext class]判断当前iOS版本是否支持JavaScriptCore,_context表示已经之前初始化了engine
         return;
     }
     
     JSContext *context = [[JSContext alloc] init];
+    
+    /*
+     context[@""] 会往context注册一些列的JS调用原生OC端的接口，web调试可以看到全局global中已经有了下面的这些javascript函数
+     */
     
 #ifdef DEBUG
     context[@"po"] = ^JSValue*(JSValue *obj) {
@@ -183,6 +191,7 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
     };
 #endif
 
+    //_OC_defineClass热修复中自定义类，可以新增类，也可以override方法或者新增方法
     context[@"_OC_defineClass"] = ^(NSString *classDeclaration, JSValue *instanceMethods, JSValue *classMethods) {
         return defineClass(classDeclaration, instanceMethods, classMethods);
     };
@@ -191,16 +200,22 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
         return defineProtocol(protocolDeclaration, instProtocol,clsProtocol);
     };
     
+    //_OC_callI js端调用oc端的实例方法
     context[@"_OC_callI"] = ^id(JSValue *obj, NSString *selectorName, JSValue *arguments, BOOL isSuper) {
         return callSelector(nil, selectorName, arguments, obj, isSuper);
     };
+    
+    //_OC_callI js端调用oc端的类方法
     context[@"_OC_callC"] = ^id(NSString *className, NSString *selectorName, JSValue *arguments) {
         return callSelector(className, selectorName, arguments, nil, NO);
     };
-    context[@"_OC_formatJSToOC"] = ^id(JSValue *obj) {//这个方法用于将 oc 端接收到的 js 对象转换为 oc 对象：
+    
+    //_OC_formatJSToOC这个方法用于将oc端接收到的js对象转换为oc对象：
+    context[@"_OC_formatJSToOC"] = ^id(JSValue *obj) {
         return formatJSToOC(obj);
     };
     
+    //_OC_formatOCToJS这个方法用于将oc对象转化为js对象传递给javascript端函数：
     context[@"_OC_formatOCToJS"] = ^id(JSValue *obj) {
         return formatOCToJS([obj toObject]);
     };
@@ -215,6 +230,7 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
         objc_setAssociatedObject(realObj, kPropAssociatedObjectKey, val, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     };
     
+    //__weak formatJSToOC先将js端传过来的数据转换为OC数据类型，再通过formatOCToJS把数据转化为JS端数据传回去，参数通过[JPBoxing boxWeakObj:obj]进行了weak化
     context[@"__weak"] = ^id(JSValue *jsval) {
         id obj = formatJSToOC(jsval);
         return [[JSContext currentContext][@"_formatOCToJS"] callWithArguments:@[formatOCToJS([JPBoxing boxWeakObj:obj])]];
@@ -323,6 +339,7 @@ static void (^_exceptionBlock)(NSString *log) = ^void(NSString *log) {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(handleMemoryWarning) name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
 #endif
     
+    //执行JSPatch.js初始化整个Javascript环境
     NSString *path = [[NSBundle bundleForClass:[self class]] pathForResource:@"JSPatch" ofType:@"js"];
     if (!path) _exceptionBlock(@"can't find JSPatch.js");
     NSString *jsCore = [[NSString alloc] initWithData:[[NSFileManager defaultManager] contentsAtPath:path] encoding:NSUTF8StringEncoding];
@@ -1821,7 +1838,7 @@ static id formatOCToJS(id obj)
     if ([obj isKindOfClass:NSClassFromString(@"NSBlock")] || [obj isKindOfClass:[JSValue class]]) {
         return obj;
     }
-    return _wrapObj(obj);//上面是特殊类型的处理，这里是通用类型的处理。
+    return _wrapObj(obj);//上面是特殊类型的处理，这里是通用类型的处理，主要是对象类型。
 }
 
 static id formatJSToOC(JSValue *jsval)
@@ -1856,7 +1873,7 @@ static id formatJSToOC(JSValue *jsval)
     id obj = [jsval toObject];
     if (!obj || [obj isKindOfClass:[NSNull class]]) return _nilObj;
     
-    if ([obj isKindOfClass:[JPBoxing class]]) return [obj unbox];
+    if ([obj isKindOfClass:[JPBoxing class]]) return [obj unbox];//表示整个数据之前是OC端Box传到JS端的，现在从JS端又传回来了。
     if ([obj isKindOfClass:[NSArray class]]) {
         NSMutableArray *newArr = [[NSMutableArray alloc] init];
         for (int i = 0; i < [(NSArray*)obj count]; i ++) {
