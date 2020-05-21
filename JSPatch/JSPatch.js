@@ -1,8 +1,8 @@
 var global = this
 
 ;(function() {
-
-  var _ocCls = {};
+  
+  var _ocCls = {};//保存方法的实现，_ocCls[clsName][isInstance][funcName] = function () {};
   var _jsCls = {};
 
   var _formatOCToJS = function(obj) {//这个方法用于将 js 端接收到的 OC 对象转换为 js 对象：
@@ -57,8 +57,13 @@ var global = this
                          _OC_callC(clsName, selectorName, args)
     return _formatOCToJS(ret)
   }
+  
+  var ff = {aa:bb,cc:dd};
+  
+  ff.aa
 
-  var _customMethods = { //_customMethods是字典对象，存 __c: function
+  
+  var _customMethods = { //_customMethods是字典对象，存 __c: function,super: function,performSelectorInOC: function,performSelector: function
     __c: function(methodName) {//__c类似于构建了js的全局转发函数，因为在oc里面会把所有的js函数用__c包含住
       var slf = this
 
@@ -113,14 +118,36 @@ var global = this
     }
   }
 
+  //这里是整个大function的执行地方，其他的var只是定义变量。
   for (var method in _customMethods) {//遍历字典对象key为method
-    if (_customMethods.hasOwnProperty(method)) {
-      Object.defineProperty(Object.prototype, method, {value: _customMethods[method], configurable:false, enumerable: false})//为所有对象都添加__c、super、performSelectorInOC、performSelector方法
+    if (_customMethods.hasOwnProperty(method)) {//Object的hasOwnProperty()方法返回一个布尔值，判断对象是否包含特定的自身（非继承）属性。
+      Object.defineProperty(Object.prototype, method,
+                            {
+                            value: _customMethods[method],
+                            configurable:false,//不可更改
+                            enumerable: false
+                            }
+    )//为所有对象都添加__c、super、performSelectorInOC、performSelector方法,这样就可以执行function里面的带有__c的语句了
     }
   }
 
   /*
    global全局字典，key为clsName，value为字典，字典中含有 __clsName: clsName
+   
+   require("UIAlertView");
+
+   this.UIAlertView = {
+      __clsName:"UIAlertView",
+   }
+
+   require返回某个类的字典，字典key为clsName类名
+   
+   即相当于=>
+   
+   {
+      __clsName:"UIAlertView",
+   }
+   
    */
   var _require = function(clsName) {
     if (!global[clsName]) {
@@ -144,6 +171,7 @@ var global = this
     return lastRequire
   }
 
+  //主要是将方法的参数个数获取到，后面传给OC端
   var _formatDefineMethods = function(methods, newMethods, realClsName) {
   
   /*
@@ -303,7 +331,7 @@ var global = this
 
     var realClsName = declaration.split(':')[0].trim()//获取类名，'JPTestProtocolObject : NSObject <JPTestProtocol, JPTestProtocol2>'
 
-    _formatDefineMethods(instMethods, newInstMethods, realClsName)
+    _formatDefineMethods(instMethods, newInstMethods, realClsName)  //主要是将方法的参数个数获取到，后面传给OC端
     _formatDefineMethods(clsMethods, newClsMethods, realClsName)
 
     var ret = _OC_defineClass(declaration, newInstMethods, newClsMethods)
