@@ -1018,7 +1018,7 @@ static void overrideMethod(Class cls, NSString *selectorName, JSValue *function,
     
     IMP originalImp = class_respondsToSelector(cls, selector) ? class_getMethodImplementation(cls, selector) : NULL; //获取原始的实现
     
-    IMP msgForwardIMP = _objc_msgForward;
+    IMP msgForwardIMP = _objc_msgForward;//_objc_msgForward表示直接走forwardInvocation进行消息转发，不进行其他的消息转发判断与处理
     #if !defined(__arm64__)
         if (typeDescription[0] == '{') {//当返回值是结构体时特殊处理。需要_objc_msgForward_stret进行转发
             //In some cases that returns struct, we should use the '_stret' API:
@@ -1031,6 +1031,12 @@ static void overrideMethod(Class cls, NSString *selectorName, JSValue *function,
         }
     #endif
 
+    /*
+     - (void)forwardInvocation:(NSInvocation *)anInvocation;
+     
+     forwardInvocation的参数为NSInvocation，所以forwardInvocation的函数签名为"v@:@"
+     
+     */
     if (class_getMethodImplementation(cls, @selector(forwardInvocation:)) != (IMP)JPForwardInvocation) { //如果当前消息转发不是JPForwardInvocation的话，用JPForwardInvocation取代原先的转发
         IMP originalForwardImp = class_replaceMethod(cls, @selector(forwardInvocation:), (IMP)JPForwardInvocation, "v@:@");
         if (originalForwardImp) {

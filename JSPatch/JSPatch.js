@@ -2,7 +2,7 @@ var global = this
 
 ;(function() {
   
-  var _ocCls = {};//保存方法的实现，_ocCls[clsName][isInstance][funcName] = function () {};
+  var _ocCls = {};//保存热更新defineClass中方法的实现，_ocCls[clsName][isInstance][funcName] = function () {};
   var _jsCls = {};
 
   var _formatOCToJS = function(obj) {//这个方法用于将 js 端接收到的 OC 对象转换为 js 对象：
@@ -98,7 +98,7 @@ var global = this
           slf.__clsName = _OC_superClsName(slf.__obj.__realClsName ? slf.__obj.__realClsName: slf.__clsName);
       }
       var clsName = slf.__clsName
-      if (clsName && _ocCls[clsName]) {
+      if (clsName && _ocCls[clsName]) {//如果是defineClass中热更新定义的类，直接从_ocCls获取函数实现
         var methodType = slf.__obj ? 'instMethods': 'clsMethods'
         if (_ocCls[clsName][methodType][methodName]) {
           slf.__isSuper = 0;
@@ -151,6 +151,9 @@ var global = this
    
    require("UIAlertView");
 
+   //this.UIAlertView 等同于 global[UIAlertView]，这个理解很重要，不然很难理解UIAlertView._c("alloc")()._c("initWithTitle_message_delegate_cancelButtonTitle_otherButtonTitles")();是怎么开始执行的。
+   //实际上UIAlertView会返回字典对象，而对象默认都有__c函数，可以开始JavaScript函数链的执行
+   
    this.UIAlertView = {
       __clsName:"UIAlertView",
    }
@@ -346,10 +349,10 @@ var global = this
 
     var realClsName = declaration.split(':')[0].trim()//获取类名，'JPTestProtocolObject : NSObject <JPTestProtocol, JPTestProtocol2>'
 
-    _formatDefineMethods(instMethods, newInstMethods, realClsName)  //主要是将方法的参数个数获取到，后面传给OC端
+    _formatDefineMethods(instMethods, newInstMethods, realClsName)  //主要是将方法的参数个数获取到，后面传给OC端,OC端可以很方便的获取到JS端到OC端的参数个数
     _formatDefineMethods(clsMethods, newClsMethods, realClsName)
 
-    var ret = _OC_defineClass(declaration, newInstMethods, newClsMethods)
+    var ret = _OC_defineClass(declaration, newInstMethods, newClsMethods)////return @{@"cls": className, @"superCls": superClassName}; 返回值为包含类名和父类名的字典
     var className = ret['cls']
     var superCls = ret['superCls']
 
@@ -367,10 +370,10 @@ var global = this
       }
     }
 
-    _setupJSMethod(className, instMethods, 1, realClsName)
+    _setupJSMethod(className, instMethods, 1, realClsName)//负责将js定义的method存入全局变量_ocCls字典中
     _setupJSMethod(className, clsMethods, 0, realClsName)
 
-    return require(className)
+    return require(className)//执行require，引入类，为JavaScript函数链的执行进行准备工作
   }
 
   global.defineProtocol = function(declaration, instProtos , clsProtos) {
