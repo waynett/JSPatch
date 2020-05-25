@@ -694,7 +694,7 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
     }
     
     NSMutableArray *argList = [[NSMutableArray alloc] init];
-    if (!isBlock) {
+    if (!isBlock) {//封装slf作为第一个Javascript的参数
         
         /*
          + (Class)class;
@@ -1830,7 +1830,7 @@ static id formatOCToJS(id obj)
      */
     
     if ([obj isKindOfClass:[NSString class]] || [obj isKindOfClass:[NSDictionary class]] || [obj isKindOfClass:[NSArray class]] || [obj isKindOfClass:[NSDate class]]) {
-        return _autoConvert ? obj: _wrapObj([JPBoxing boxObj:obj]);//这几种类型默认可以自动转换，js可以直接处理
+        return _autoConvert ? obj: _wrapObj([JPBoxing boxObj:obj]);//这几种类型默认可以自动转换，js可以直接处理，但是默认是不采用_autoConvert的，而是_wrapObj封装对象
     }
     if ([obj isKindOfClass:[NSNumber class]]) {
         return _convertOCNumberToString ? [(NSNumber*)obj stringValue] : obj;
@@ -1871,9 +1871,9 @@ static id formatJSToOC(JSValue *jsval)
      */
     
     id obj = [jsval toObject];
-    if (!obj || [obj isKindOfClass:[NSNull class]]) return _nilObj;
+    if (!obj || [obj isKindOfClass:[NSNull class]]) return _nilObj;//如果jsval是undefined类型，返回_nilObj
     
-    if ([obj isKindOfClass:[JPBoxing class]]) return [obj unbox];//表示整个数据之前是OC端Box传到JS端的，现在从JS端又传回来了。
+    if ([obj isKindOfClass:[JPBoxing class]]) return [obj unbox];//表示整个数据之前是OC端Box传到JS端的，现在从JS端又传回来了，直接unbox解包。
     if ([obj isKindOfClass:[NSArray class]]) {
         NSMutableArray *newArr = [[NSMutableArray alloc] init];
         for (int i = 0; i < [(NSArray*)obj count]; i ++) {
@@ -1881,12 +1881,12 @@ static id formatJSToOC(JSValue *jsval)
         }
         return newArr;
     }
-    if ([obj isKindOfClass:[NSDictionary class]]) {
-        if (obj[@"__obj"]) {
+    if ([obj isKindOfClass:[NSDictionary class]]) {//JavaScript中的Object object转化到OC层就是NSDictionary
+        if (obj[@"__obj"]) {//如果字典中包含__obj，表示该类之前在JPForwardInvocation中的_formatOCToJSList=>formatOCToJS => _wrapObj进行过包装处理
             id ocObj = [obj objectForKey:@"__obj"];
             if ([ocObj isKindOfClass:[JPBoxing class]]) return [ocObj unbox];
             return ocObj;
-        } else if (obj[@"__clsName"]) {
+        } else if (obj[@"__clsName"]) {//如果字典中包含__obj，表示该类是新增或者执行了Override的类，之前在defineClass中进行过包装处理
             return NSClassFromString(obj[@"__clsName"]);
         }
         if (obj[@"__isBlock"]) {
@@ -1898,12 +1898,12 @@ static id formatJSToOC(JSValue *jsval)
             }
         }
         NSMutableDictionary *newDict = [[NSMutableDictionary alloc] init];
-        for (NSString *key in [obj allKeys]) {
+        for (NSString *key in [obj allKeys]) {//如果是其他数据类型，递归调用formatJSToOC
             [newDict setObject:formatJSToOC(jsval[key]) forKey:key];
         }
         return newDict;
     }
-    return obj;
+    return obj;//如果是string,number, boolean,Date object类型，直接转化为OC的NSString，NSNumber，NSDate类型返回。
 }
 
 static id _formatOCToJSList(NSArray *list)
