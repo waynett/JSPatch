@@ -897,7 +897,7 @@ static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, 
             if ([obj isKindOfClass:[NSString class]]) { \
                 ret = NSSelectorFromString(obj); \
             }
-
+            
         JP_FWD_RET_CASE_RET('@', id, JP_FWD_RET_CODE_ID)
         JP_FWD_RET_CASE_RET('^', void*, JP_FWD_RET_CODE_POINTER)
         JP_FWD_RET_CASE_RET('*', void*, JP_FWD_RET_CODE_POINTER)

@@ -605,7 +605,275 @@ NSString *script = [NSString stringWithContentsOfFile:sourcePath encoding:NSUTF8
 
    
 
-6. 
+6. 下面分析具体执行热更新逻辑，以覆盖OC原始实现为例，入口是调用OC中的方法：
+
+   ```objc
+   - (void)handleBtn:(id)sender
+   {
+   }
+   ```
+
+   ```javascript
+   require("UIAlertView");
+   
+   defineClass('JPViewController', {
+     
+     handleBtn: function(sender) {
+          
+       var alert = UIAlertView.alloc().initWithTitle_message_delegate_cancelButtonTitle_otherButtonTitles("JSPatchAmend", "Success", null, "Yes", null, null);
+       alert.show();
+   
+     }
+   })
+   ```
+
+   
+
+   1. 因为handleBtn:(id)sender已经被js重写，handleBtn在js：defineClass => OC:defineClass => OC:override 被直接转发到JPForwardInvocation，而JPForwardInvocation是替换的forwardInvocation，该方法定义如下：
+
+      ```objc
+      
+        - (void)forwardInvocation:(NSInvocation *)anInvocation;
+           
+        //forwardInvocation的参数为NSInvocation，所以forwardInvocation的函数签名为"v@:@"
+             
+      ```
+
+
+      而NSInvocation对象包含了OC中方法的所有信息，包括：参数个数，方法签名，方法名等，所以在JPForwardInvocation中可以通过NSInvocation取到方法信息：
+
+      ```objc
+          NSMethodSignature *methodSignature = [invocation methodSignature];
+          NSInteger numberOfArguments = [methodSignature numberOfArguments];
+          NSString *selectorName = isBlock ? @"" : NSStringFromSelector(invocation.selector);
+          NSString *JPSelectorName = [NSString stringWithFormat:@"_JP%@", selectorName];
+      ```
+
+      
+
+   2. JPForwardInvocation通过getJSFunctionInObjectHierachy获取到JavaScript中的function
+
+      ```objc
+      static void JPForwardInvocation(__unsafe_unretained id assignSlf, SEL selector, NSInvocation *invocation)
+      {
+          JSValue *jsFunc = isBlock ? objc_getAssociatedObject(assignSlf, "_JSValue")[@"cb"] : getJSFunctionInObjectHierachy(slf, JPSelectorName);
+           
+          //一些列封装OC原始方法的参数到params，这个参数列表是作为jsFunc的参数。其中第一个是self本身
+          
+          NSMutableArray *argList = [[NSMutableArray alloc] init];
+          [argList addObject:[JPBoxing boxWeakObj:slf]];
+          
+          //... 通过方法签名获取每一个参数类型，并添加到argList
+      
+          NSArray *params = _formatOCToJSList(argList);//将所有oc参数转为js参数
+      
+          //根据返回值类型，执行响应的代码块，
+          
+          switch (returnType[0] == 'r' ? returnType[1] : returnType[0]) {
+              
+      						case '@' : { //如果返回值是对象 
+                      JSValue *jsval;
+                  		[_JSMethodForwardCallLock lock]; 
+                  		jsval = [jsFunc callWithArguments:params];
+                  		[_JSMethodForwardCallLock unlock];
+                      id __autoreleasing ret = formatJSToOC(jsval);
+                      if (ret == _nilObj ||  ([ret isKindOfClass:[NSNumber class]] && strcmp([ret objCType], "c") == 0 && ![ret boolValue])) 
+                      {
+                        ret = nil;
+                      }
+                      [invocation setReturnValue:&ret];
+                      break;  
+                  }
+      
+          }
+      
+      ```
+
+      ```objc
+      //根据Class和JPSelectorName从_JSOverideMethods全局字典中获取jspatch.js中定义方法名对应的function方法体
+      static JSValue *getJSFunctionInObjectHierachy(id slf, NSString *selectorName)
+      {
+          Class cls = object_getClass(slf);
+          if (_currInvokeSuperClsName[selectorName]) {
+              cls = NSClassFromString(_currInvokeSuperClsName[selectorName]);
+              selectorName = [selectorName stringByReplacingOccurrencesOfString:@"_JPSUPER_" withString:@"_JP"];
+          }
+          JSValue *func = _JSOverideMethods[cls][selectorName];//_JSOverideMethods在defineClass中已经初始化
+          while (!func) {//如果func为空，递归从父类中获取
+              cls = class_getSuperclass(cls);
+              if (!cls) {//所有类都没有该方法，直接退出返回nil
+                  return nil;
+              }
+              func = _JSOverideMethods[cls][selectorName];
+          }
+          return func;
+      }
+      ```
+
+      
+
+   3. JavaScript中的handleBtn会被转换为如下，实际执行的JavaScript函数是下面第二个参数——function()匿名函数：
+
+      ```javascript
+      newMethods[methodName] = [originMethod.length, function() { //originMethod.length表示函数期望的参数数量.
+                try {             
+                  //JPForwardInvocation中封装JS传递过去的
+                  var args = _formatOCToJS(Array.prototype.slice.call(arguments))//arguments is an Array-like object accessible inside functions that contains the values of the arguments passed to that function.
+                  var lastSelf = global.self
+                  global.self = args[0]
+                  if (global.self) global.self.__realClsName = realClsName
+                  args.splice(0,1),//删除第一个参数global.self
+                  var ret = originMethod.apply(originMethod, args)
+                  global.self = lastSelf//还原global.self
+                  return ret
+                } catch(e) {
+                  _OC_catch(e.message, e.stack)
+                }
+              }]
+      ```
+
+   4. var ret = originMethod.apply(originMethod, args) 会开始执行JavaScript形式的热更新function：
+
+      ```javascript
+      var alert = UIAlertView.alloc().initWithTitle_message_delegate_cancelButtonTitle_otherButtonTitles("JSPatchAmend", "Success", null, "Yes", null, null);
+      alert.show();
+      ```
+
+      该代码被被格式化为：
+
+       UIAlertView.\__c("alloc")().\__c("initWithTitle_message_delegate_cancelButtonTitle_otherButtonTitles"**)**("JSPatchAmend", "Success", **null**, "Yes", **null**, **null**);
+
+      通过require，UIAlertView被解析成(*<u>UIAlertView在JavaScript是Object</u>*)：
+
+         {
+            __clsName:"UIAlertView",
+         }
+
+   5. 又因为JSPatch.js执行后，会对所有的Object添加__c，super等方法，如下：
+
+      ```javascript
+      var _customMethods = { //_customMethods是字典对象，存 __c: function,super: function,performSelectorInOC: function,performSelector: function
+          __c: function(methodName) {//__c类似于构建了js的全局转发函数，因为在oc里面会把所有的js函数用__c包含住
+             
+            //最初this为require方法返回的对象，即：{__clsName:"UIAlertView"},该对象调用__c("alloc")方法,
+        
+            var slf = this
+      
+            if (slf instanceof Boolean) {
+              return function() {
+                return false
+              }
+            }
+            if (slf[methodName]) {
+              return slf[methodName].bind(slf);
+            }
+      
+            if (!slf.__obj && !slf.__clsName) {
+              throw new Error(slf + '.' + methodName + ' is undefined')
+            }
+            if (slf.__isSuper && slf.__clsName) {
+                slf.__clsName = _OC_superClsName(slf.__obj.__realClsName ? slf.__obj.__realClsName: slf.__clsName);
+            }
+            var clsName = slf.__clsName
+            if (clsName && _ocCls[clsName]) {//如果是defineClass中热更新定义的类，直接从_ocCls获取函数实现
+              var methodType = slf.__obj ? 'instMethods': 'clsMethods'
+              if (_ocCls[clsName][methodType][methodName]) {
+                slf.__isSuper = 0;
+                return _ocCls[clsName][methodType][methodName].bind(slf)
+              }
+            }
+      
+            return function(){//__c function返回值又是一个匿名函数-闭包，闭包里面访问外包的_methodFunc方法
+              var args = Array.prototype.slice.call(arguments)     
+              return _methodFunc(slf.__obj, slf.__clsName, methodName, args, slf.__isSuper)
+            }
+          },
+          
+           super: function() {
+            var slf = this
+            if (slf.__obj) {
+              slf.__obj.__realClsName = slf.__realClsName;
+            }
+            return {__obj: slf.__obj, __clsName: slf.__clsName, __isSuper: 1}
+           },
+      
+        }
+      
+        //这里是整个大function的执行地方，其他的var只是定义变量。
+        for (var method in _customMethods) {//遍历字典对象key为method
+          if (_customMethods.hasOwnProperty(method)) {//Object的hasOwnProperty()方法返回一个布尔值，判断对象是否包含特定的自身（非继承）属性。
+            Object.defineProperty(Object.prototype, method,
+                                  {
+                                  value: _customMethods[method],
+                                  configurable:false,//不可更改
+                                  enumerable: false
+                                  }
+          )//为所有对象都添加__c、super、performSelectorInOC、performSelector方法,这样就可以执行function里面的带有__c的语句了
+          }
+        }
+      ```
+
+      所以UIAlertView现在可以解析为：
+
+      ```javascript
+      {
+            __clsName:"UIAlertView",
+            __C:function(methodName){},
+            super:function(){}
+            ...
+      }
+      ```
+
+       所以也才可以直接指向UIAlertView.__c("alloc")
+
+   6. __c("alloc")会调用如下匿名函数,如果执行链上的Object没有\__objc属性，表示该Object是类对象，否则就是实例对象（根据_methodFunc的第一个参数slf.\__obj进行判断）：
+
+      ```javascript
+      return function(){//__c function返回值又是一个匿名函数-闭包，闭包里面访问外包的_methodFunc方法
+              var args = Array.prototype.slice.call(arguments)     
+              return _methodFunc(slf.__obj, slf.__clsName, methodName, args, slf.__isSuper)
+            }
+      
+        //initWithTitle_message_delegate_cancelButtonTitle_otherButtonTitles
+        //initWithTitle:message:delegate:cancelButtonTitle:otherButtonTitles:;
+        var _methodFunc = function(instance, clsName, methodName, args, isSuper, isPerformSelector) {
+          var selectorName = methodName
+          if (!isPerformSelector) {
+            methodName = methodName.replace(/__/g, "-")
+            selectorName = methodName.replace(/_/g, ":").replace(/-/g, "_")
+            var marchArr = selectorName.match(/:/g)
+            var numOfArgs = marchArr ? marchArr.length : 0
+            if (args.length > numOfArgs) {
+              selectorName += ":"
+            }
+          }
+          var ret = instance ? _OC_callI(instance, selectorName, args, isSuper):
+                               _OC_callC(clsName, selectorName, args)//_OC_callC会返回对象：@{@"__obj": obj, @"__clsName":__clsName};
+          
+          /*
+           //返回值字典同时包含对象和对象的类型：@{@"__obj": obj, @"__clsName":__clsName};
+           static NSDictionary *_wrapObj(id obj)
+           {
+               if (!obj || obj == _nilObj) {
+                   return @{@"__isNil": @(YES)};
+               }
+               return @{@"__obj": obj, @"__clsName": NSStringFromClass([obj isKindOfClass:[JPBoxing class]] ? [[((JPBoxing *)obj) unbox] class]: [obj class])};//如果之前已经box封包，解包获取类型，否则直接通过[obj class]
+           }
+           */
+          return _formatOCToJS(ret)
+        }
+      
+      ```
+
+   7. 类对象执行_OC_callC => callSelector
+
+   
+
+
+
+
+
+
 
 
 
