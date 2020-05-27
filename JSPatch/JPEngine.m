@@ -1804,7 +1804,9 @@ static BOOL blockTypeIsScalarPointer(NSString *typeString)
             !NSClassFromString(typeWithoutAsterisk));
 }
 
-
+//将带有_分隔格式的JavaScript方法体转换为带有:分隔的oc方法命名方式
+//getRtMinWithSecCode_andCompletionBlock_failureBlock
+//getRtMinWithSecCode:andCompletionBlock:failureBlock
 static NSString *convertJPSelectorString(NSString *selectorString)
 {
     NSString *tmpJSMethodName = [selectorString stringByReplacingOccurrencesOfString:@"__" withString:@"-"];

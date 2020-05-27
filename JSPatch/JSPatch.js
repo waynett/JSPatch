@@ -241,6 +241,8 @@ var global = this
              item1[, item2 ] The elements to add to the array, beginning from start
              
              */
+                                  
+            //JPForwardInvocation中封装JS传递过去的
             var args = _formatOCToJS(Array.prototype.slice.call(arguments))//arguments is an Array-like object accessible inside functions that contains the values of the arguments passed to that function.
             var lastSelf = global.self
             global.self = args[0]
