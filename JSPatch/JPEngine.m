@@ -614,7 +614,7 @@ static NSDictionary *defineClass(NSString *classDeclaration, JSValue *instanceMe
         for (NSString *jsMethodName in methodDict.allKeys) {
             JSValue *jsMethodArr = [jsMethods valueForProperty:jsMethodName];
             int numberOfArg = [jsMethodArr[0] toInt32]; //获取参数的个数，这是为什么要在_formatDefineMethods中把函数的参数个数封装到数组中的原因，这个主要用在后面如果OC中没有定义该方法的时候
-            NSString *selectorName = convertJPSelectorString(jsMethodName);
+            NSString *selectorName = convertJPSelectorString(jsMethodName);//"_"分隔JS方法格式转换为“：”分隔OC方法格式
             
             if ([selectorName componentsSeparatedByString:@":"].count - 1 < numberOfArg) {
                 selectorName = [selectorName stringByAppendingString:@":"];
