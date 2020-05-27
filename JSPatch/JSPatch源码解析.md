@@ -749,11 +749,11 @@ NSString *script = [NSString stringWithContentsOfFile:sourcePath encoding:NSUTF8
             __clsName:"UIAlertView",
          }
 
-   5. 又因为JSPatch.js执行后，会对所有的Object添加__c，super等方法，如下：
+   5. 又因为JSPatch.js执行后，会对所有的Object添加_，如下：
 
       ```javascript
       var _customMethods = { //_customMethods是字典对象，存 __c: function,super: function,performSelectorInOC: function,performSelector: function
-          __c: function(methodName) {//__c类似于构建了js的全局转发函数，因为在oc里面会把所有的js函数用__c包含住
+          __c: function(methodName) {//__c类似于构建了js的全局转发函数，因为在oc里面会把所有的js函数用__c包含住,_c函数返回值为_methodFunc返回值，即执行callSelector返回值
              
             //最初this为require方法返回的对象，即：{__clsName:"UIAlertView"},该对象调用__c("alloc")方法,
         
@@ -864,6 +864,8 @@ NSString *script = [NSString stringWithContentsOfFile:sourcePath encoding:NSUTF8
         }
       
       ```
+
+      ![](https://cdn.jsdelivr.net/gh/waynett/imgHosting/imgJietu20200527-173610-HD.gif)
 
    7. 类对象执行_OC_callC => callSelector
 

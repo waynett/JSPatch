@@ -1077,7 +1077,7 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
             return @{@"__isNil": @(YES)};
         }
     }
-    id argumentsObj = formatJSToOC(arguments);
+    id argumentsObj = formatJSToOC(arguments);//js端传过来的参数转换为OC数组
     
     if (instance && [selectorName isEqualToString:@"toJS"]) {
         if ([instance isKindOfClass:[NSString class]] || [instance isKindOfClass:[NSDictionary class]] || [instance isKindOfClass:[NSArray class]] || [instance isKindOfClass:[NSDate class]]) {
@@ -1124,24 +1124,24 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
     if (!_JSMethodSignatureCache) {
         _JSMethodSignatureCache = [[NSMutableDictionary alloc]init];
     }
-    if (instance) {
+    if (instance) {//如果是实例方法调用
         [_JSMethodSignatureLock lock];
         if (!_JSMethodSignatureCache[cls]) {
             _JSMethodSignatureCache[(id<NSCopying>)cls] = [[NSMutableDictionary alloc]init];
         }
-        methodSignature = _JSMethodSignatureCache[cls][selectorName];
-        if (!methodSignature) {
-            methodSignature = [cls instanceMethodSignatureForSelector:selector];
+        methodSignature = _JSMethodSignatureCache[cls][selectorName];//从缓存中获取实例方法
+        if (!methodSignature) {//如果缓存没有命中
+            methodSignature = [cls instanceMethodSignatureForSelector:selector];//通过cls和selector获取实例方法的签名
             methodSignature = fixSignature(methodSignature);
-            _JSMethodSignatureCache[cls][selectorName] = methodSignature;
+            _JSMethodSignatureCache[cls][selectorName] = methodSignature;//入缓存
         }
         [_JSMethodSignatureLock unlock];
         if (!methodSignature) {
             _exceptionBlock([NSString stringWithFormat:@"unrecognized selector %@ for instance %@", selectorName, instance]);
             return nil;
         }
-        invocation = [NSInvocation invocationWithMethodSignature:methodSignature];
-        [invocation setTarget:instance];
+        invocation = [NSInvocation invocationWithMethodSignature:methodSignature];//通过方法签名生成NSInvocation对象
+        [invocation setTarget:instance];//设置NSInvocation对象的target对象
     } else {
         methodSignature = [cls methodSignatureForSelector:selector];
         methodSignature = fixSignature(methodSignature);
@@ -1152,10 +1152,16 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
         invocation= [NSInvocation invocationWithMethodSignature:methodSignature];
         [invocation setTarget:cls];
     }
-    [invocation setSelector:selector];
+    [invocation setSelector:selector];//设置NSInvocation对象的selector对象
     
+    /*
+     There are always at least two arguments, because an NSMethodSignature object includes the implicit arguments self and _cmd, which are the first two arguments passed to every method implementation.
+     */
     NSUInteger numberOfArguments = methodSignature.numberOfArguments;
     NSInteger inputArguments = [(NSArray *)argumentsObj count];
+    //[[UIActionSheet alloc] initWithTitle:nil delegate:self cancelButtonTitle:@"取消" destructiveButtonTitle:nil otherButtonTitles:@"拍照",@"从相册选择", nil]
+    //- (instancetype)initWithTitle:(nullable NSString *)title delegate:(nullable id<UIActionSheetDelegate>)delegate cancelButtonTitle:(nullable NSString *)cancelButtonTitle destructiveButtonTitle:(nullable NSString *)destructiveButtonTitle otherButtonTitles:(nullable NSString *)otherButtonTitles, ...
+    //上面这种最后一个是可变参数的方法，需要特殊处理，上面的inputArguments > numberOfArguments - 2
     if (inputArguments > numberOfArguments - 2) {
         // calling variable argument method, only support parameter type `id` and return type `id`
         id sender = instance != nil ? instance : cls;
