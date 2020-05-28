@@ -869,6 +869,206 @@ NSString *script = [NSString stringWithContentsOfFile:sourcePath encoding:NSUTF8
 
    7. 类对象执行_OC_callC => callSelector
 
+   ```objective-c
+   static id callSelector(NSString *className, NSString *selectorName, JSValue *arguments, JSValue *instance, BOOL isSuper)
+   {
+      
+       id argumentsObj = formatJSToOC(arguments);//js端传过来的参数转换为OC数组
+       
+       Class cls = instance ? [instance class] : NSClassFromString(className);
+       SEL selector = NSSelectorFromString(selectorName);
+       
+       
+       NSInvocation *invocation;
+       NSMethodSignature *methodSignature;
+       if (!_JSMethodSignatureCache) {
+           _JSMethodSignatureCache = [[NSMutableDictionary alloc]init];
+       }
+       if (instance) {//如果是实例方法调用
+           [_JSMethodSignatureLock lock];
+           if (!_JSMethodSignatureCache[cls]) {
+               _JSMethodSignatureCache[(id<NSCopying>)cls] = [[NSMutableDictionary alloc]init];
+           }
+           methodSignature = _JSMethodSignatureCache[cls][selectorName];//从缓存中获取实例方法
+           if (!methodSignature) {//如果缓存没有命中
+               methodSignature = [cls instanceMethodSignatureForSelector:selector];//通过cls和selector获取实例方法的签名
+               methodSignature = fixSignature(methodSignature);
+               _JSMethodSignatureCache[cls][selectorName] = methodSignature;//入缓存
+           }
+           [_JSMethodSignatureLock unlock];
+           if (!methodSignature) {
+               _exceptionBlock([NSString stringWithFormat:@"unrecognized selector %@ for instance %@", selectorName, instance]);
+               return nil;
+           }
+           invocation = [NSInvocation invocationWithMethodSignature:methodSignature];//通过方法签名生成NSInvocation对象
+           [invocation setTarget:instance];//设置NSInvocation对象的target对象
+       } else {
+           methodSignature = [cls methodSignatureForSelector:selector];
+           methodSignature = fixSignature(methodSignature);
+           if (!methodSignature) {
+               _exceptionBlock([NSString stringWithFormat:@"unrecognized selector %@ for class %@", selectorName, className]);
+               return nil;
+           }
+           invocation= [NSInvocation invocationWithMethodSignature:methodSignature];
+           [invocation setTarget:cls];
+       }
+       [invocation setSelector:selector];//设置NSInvocation对象的selector对象
+       
+       /*
+        There are always at least two arguments, because an NSMethodSignature object includes the implicit arguments self and _cmd, which are the first two arguments passed to every method implementation.
+        */
+       NSUInteger numberOfArguments = methodSignature.numberOfArguments;
+       NSInteger inputArguments = [(NSArray *)argumentsObj count];
+       //[[UIActionSheet alloc] initWithTitle:nil delegate:self cancelButtonTitle:@"取消" destructiveButtonTitle:nil otherButtonTitles:@"拍照",@"从相册选择", nil]
+       //- (instancetype)initWithTitle:(nullable NSString *)title delegate:(nullable id<UIActionSheetDelegate>)delegate cancelButtonTitle:(nullable NSString *)cancelButtonTitle destructiveButtonTitle:(nullable NSString *)destructiveButtonTitle otherButtonTitles:(nullable NSString *)otherButtonTitles, ...
+       //上面这种最后一个是可变参数的方法，需要特殊处理，上面的inputArguments > numberOfArguments - 2
+       if (inputArguments > numberOfArguments - 2) {
+           // calling variable argument method, only support parameter type `id` and return type `id`
+           id sender = instance != nil ? instance : cls;
+           id result = invokeVariableParameterMethod(argumentsObj, methodSignature, sender, selector);
+           return formatOCToJS(result);
+       }
+       
+       //调用setArgument将js传递过来的参数设置到NSInvocation的参数，
+       for (NSUInteger i = 2; i < numberOfArguments; i++) {
+           const char *argumentType = [methodSignature getArgumentTypeAtIndex:i];
+           id valObj = argumentsObj[i-2];
+           switch (argumentType[0] == 'r' ? argumentType[1] : argumentType[0]) {
+                   
+                //根据参数类型获取参数值
+                case 'c': {                              
+                       char value = [valObj charValue];                     
+                       [invocation setArgument:&value atIndex:i];
+                       break; 
+                   }
+                                   
+               case ':': {
+                   SEL value = nil;
+                   if (valObj != _nilObj) {
+                       value = NSSelectorFromString(valObj);
+                   }
+                   [invocation setArgument:&value atIndex:i];
+                   break;
+               }
+               case '*':
+               case '^': {
+                   if ([valObj isKindOfClass:[JPBoxing class]]) {
+                       void *value = [((JPBoxing *)valObj) unboxPointer];
+                       [invocation setArgument:&value atIndex:i];
+                       break;
+                   }
+               }
+               case '#': {
+                   if ([valObj isKindOfClass:[JPBoxing class]]) {
+                       Class value = [((JPBoxing *)valObj) unboxClass];
+                       [invocation setArgument:&value atIndex:i];
+                       break;
+                   }
+               }
+          
+           }
+       }
+       
+       [invocation invoke];//执行NSInvocation
+       
+       char returnType[255];
+       strcpy(returnType, [methodSignature methodReturnType]);
+       
+       //对调用返回值进行处理
+       id returnValue;
+       if (strncmp(returnType, "v", 1) != 0) {//如果NSInvocation调用有返回值
+           if (strncmp(returnType, "@", 1) == 0) {//返回值是对象类型
+               void *result;
+               [invocation getReturnValue:&result];
+               
+               //For performance, ignore the other methods prefix with alloc/new/copy/mutableCopy
+               if ([selectorName isEqualToString:@"alloc"] || [selectorName isEqualToString:@"new"] ||
+                   [selectorName isEqualToString:@"copy"] || [selectorName isEqualToString:@"mutableCopy"]) {
+                   returnValue = (__bridge_transfer id)result;
+               } else {
+                   returnValue = (__bridge id)result;
+               }
+               return formatOCToJS(returnValue);
+               
+           } else {//返回值是普通Assign数据类型
+               switch (returnType[0] == 'r' ? returnType[1] : returnType[0]) {
+                       
+                   #define JP_CALL_RET_CASE(_typeString, _type) \
+                   case _typeString: {                              \
+                       _type tempResultSet; \
+                       [invocation getReturnValue:&tempResultSet];\
+                       returnValue = @(tempResultSet); \
+                       break; \
+                   }
+                       
+                   JP_CALL_RET_CASE('c', char)
+                   JP_CALL_RET_CASE('C', unsigned char)
+                   JP_CALL_RET_CASE('s', short)
+                   JP_CALL_RET_CASE('S', unsigned short)
+                   JP_CALL_RET_CASE('i', int)
+                   JP_CALL_RET_CASE('I', unsigned int)
+                   JP_CALL_RET_CASE('l', long)
+                   JP_CALL_RET_CASE('L', unsigned long)
+                   JP_CALL_RET_CASE('q', long long)
+                   JP_CALL_RET_CASE('Q', unsigned long long)
+                   JP_CALL_RET_CASE('f', float)
+                   JP_CALL_RET_CASE('d', double)
+                   JP_CALL_RET_CASE('B', BOOL)
+   
+                   case '{': {
+                       NSString *typeString = extractStructName([NSString stringWithUTF8String:returnType]);
+                       #define JP_CALL_RET_STRUCT(_type, _methodName) \
+                       if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
+                           _type result;   \
+                           [invocation getReturnValue:&result];    \
+                           return [JSValue _methodName:result inContext:_context];    \
+                       }
+                       JP_CALL_RET_STRUCT(CGRect, valueWithRect)
+                       JP_CALL_RET_STRUCT(CGPoint, valueWithPoint)
+                       JP_CALL_RET_STRUCT(CGSize, valueWithSize)
+                       JP_CALL_RET_STRUCT(NSRange, valueWithRange)
+                       @synchronized (_context) {
+                           NSDictionary *structDefine = _registeredStruct[typeString];
+                           if (structDefine) {
+                               size_t size = sizeOfStructTypes(structDefine[@"types"]);
+                               void *ret = malloc(size);
+                               [invocation getReturnValue:ret];
+                               NSDictionary *dict = getDictOfStruct(ret, structDefine);
+                               free(ret);
+                               return dict;
+                           }
+                       }
+                       break;
+                   }
+                       
+                   case '*':
+                   case '^': {//如果返回值是指针类型，需要JPBoxing化
+                       void *result;
+                       [invocation getReturnValue:&result];
+                       returnValue = formatOCToJS([JPBoxing boxPointer:result]);
+                       if (strncmp(returnType, "^{CG", 4) == 0) {
+                           if (!_pointersToRelease) {
+                               _pointersToRelease = [[NSMutableArray alloc] init];
+                           }
+                           [_pointersToRelease addObject:[NSValue valueWithPointer:result]];
+                           CFRetain(result);
+                       }
+                       break;
+                   }
+                   case '#': {//如果返回值是Class类型
+                       Class result;
+                       [invocation getReturnValue:&result];
+                       returnValue = formatOCToJS([JPBoxing boxClass:result]);
+                       break;
+                   }
+               }
+               return returnValue;
+           }
+       }
+       return nil;
+   }
+   ```
+
    
 
 

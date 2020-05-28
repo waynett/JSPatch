@@ -1315,6 +1315,7 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
         strcpy(returnType, @encode(float));
     }
 
+    //对调用返回值进行处理
     id returnValue;
     if (strncmp(returnType, "v", 1) != 0) {//如果NSInvocation调用有返回值
         if (strncmp(returnType, "@", 1) == 0) {//返回值是对象类型
