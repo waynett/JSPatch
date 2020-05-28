@@ -1169,6 +1169,7 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
         return formatOCToJS(result);
     }
     
+    //调用setArgument将js传递过来的参数设置到NSInvocation的参数，
     for (NSUInteger i = 2; i < numberOfArguments; i++) {
         const char *argumentType = [methodSignature getArgumentTypeAtIndex:i];
         id valObj = argumentsObj[i-2];
@@ -1289,7 +1290,7 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
     }
     
     if (superClassName) _currInvokeSuperClsName[selectorName] = superClassName;
-    [invocation invoke];
+    [invocation invoke];//执行NSInvocation
     if (superClassName) [_currInvokeSuperClsName removeObjectForKey:selectorName];
     if ([_markArray count] > 0) {
         for (JPBoxing *box in _markArray) {
@@ -1315,8 +1316,8 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
     }
 
     id returnValue;
-    if (strncmp(returnType, "v", 1) != 0) {
-        if (strncmp(returnType, "@", 1) == 0) {
+    if (strncmp(returnType, "v", 1) != 0) {//如果NSInvocation调用有返回值
+        if (strncmp(returnType, "@", 1) == 0) {//返回值是对象类型
             void *result;
             [invocation getReturnValue:&result];
             
@@ -1329,7 +1330,7 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
             }
             return formatOCToJS(returnValue);
             
-        } else {
+        } else {//返回值是普通Assign数据类型
             switch (returnType[0] == 'r' ? returnType[1] : returnType[0]) {
                     
                 #define JP_CALL_RET_CASE(_typeString, _type) \
@@ -1379,8 +1380,9 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
                     }
                     break;
                 }
+                    
                 case '*':
-                case '^': {
+                case '^': {//如果返回值是指针类型，需要JPBoxing化
                     void *result;
                     [invocation getReturnValue:&result];
                     returnValue = formatOCToJS([JPBoxing boxPointer:result]);
@@ -1393,7 +1395,7 @@ static id callSelector(NSString *className, NSString *selectorName, JSValue *arg
                     }
                     break;
                 }
-                case '#': {
+                case '#': {//如果返回值是Class类型
                     Class result;
                     [invocation getReturnValue:&result];
                     returnValue = formatOCToJS([JPBoxing boxClass:result]);
