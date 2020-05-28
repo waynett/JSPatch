@@ -1000,45 +1000,14 @@ NSString *script = [NSString stringWithContentsOfFile:sourcePath encoding:NSUTF8
                        returnValue = @(tempResultSet); \
                        break; \
                    }
-                       
-                   JP_CALL_RET_CASE('c', char)
-                   JP_CALL_RET_CASE('C', unsigned char)
-                   JP_CALL_RET_CASE('s', short)
-                   JP_CALL_RET_CASE('S', unsigned short)
-                   JP_CALL_RET_CASE('i', int)
-                   JP_CALL_RET_CASE('I', unsigned int)
-                   JP_CALL_RET_CASE('l', long)
-                   JP_CALL_RET_CASE('L', unsigned long)
-                   JP_CALL_RET_CASE('q', long long)
-                   JP_CALL_RET_CASE('Q', unsigned long long)
-                   JP_CALL_RET_CASE('f', float)
-                   JP_CALL_RET_CASE('d', double)
-                   JP_CALL_RET_CASE('B', BOOL)
+                   
+                  JP_CALL_RET_CASE('c', char)
    
-                   case '{': {
-                       NSString *typeString = extractStructName([NSString stringWithUTF8String:returnType]);
-                       #define JP_CALL_RET_STRUCT(_type, _methodName) \
-                       if ([typeString rangeOfString:@#_type].location != NSNotFound) {    \
-                           _type result;   \
-                           [invocation getReturnValue:&result];    \
-                           return [JSValue _methodName:result inContext:_context];    \
-                       }
-                       JP_CALL_RET_STRUCT(CGRect, valueWithRect)
-                       JP_CALL_RET_STRUCT(CGPoint, valueWithPoint)
-                       JP_CALL_RET_STRUCT(CGSize, valueWithSize)
-                       JP_CALL_RET_STRUCT(NSRange, valueWithRange)
-                       @synchronized (_context) {
-                           NSDictionary *structDefine = _registeredStruct[typeString];
-                           if (structDefine) {
-                               size_t size = sizeOfStructTypes(structDefine[@"types"]);
-                               void *ret = malloc(size);
-                               [invocation getReturnValue:ret];
-                               NSDictionary *dict = getDictOfStruct(ret, structDefine);
-                               free(ret);
-                               return dict;
-                           }
-                       }
-                       break;
+                   case 'c': {                              
+                       char tempResultSet; 
+                       [invocation getReturnValue:&tempResultSet];
+                       returnValue = @(tempResultSet); 
+                       break; 
                    }
                        
                    case '*':
